@@ -1,0 +1,35 @@
+version: 2
+
+name: STRENGTH_APP
+database: TRAINING_APP
+schema: APPS
+query_warehouse: ALERTS_WH
+build_eai: ALLOW_ALL_EAI
+
+profile:
+  label: "Strength"
+  description: "Conjugate strength programming and set logging with risk-adjusted stimulus tracking."
+  icon: icon.svg
+
+install:
+  commands:
+    - ["npm", "ci", "--include=dev"]
+
+run:
+  command: ["node", ".next/standalone/server.js"]
+  # Required so the SPCS ingress proxy injects sf-context-current-user-token,
+  # letting the app identify the authenticated caller and scope data by user.
+  executeAsCaller: true
+
+ignore:
+  - node_modules
+  - .env*
+  - __pycache__
+  - "*.pyc"
+  - .next
+  - .git
+  - snowflake.log
+  - output
+  - sql
+  - __tests__
+  - app.yml.template-bak
