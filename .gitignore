@@ -1,8 +1,37 @@
+# Dependencies
 node_modules/
+
+# Build output
 .next/
 out/
 output/
 *.tsbuildinfo
-.env.local
+
+# Logs
 *.log
+snowflake.log
+
+# OS
 .DS_Store
+
+# Test/coverage output
+coverage/
+
+# Secrets and local environment.
+# Deliberately wider than the files actually in use: this repo is public and
+# git history is not practically redactable once pushed, so the ignore rule
+# has to cover the file you will create by accident, not just the ones that
+# exist today.
+.env
+.env.*
+!.env.example
+
+# Snowflake credentials and local CLI state. Deployment authenticates via
+# GitHub OIDC, so no connection file, PAT, or private key should ever be
+# committed to this repository.
+.snowflake/
+connections.toml
+config.toml
+*.p8
+*.pem
+*.key
