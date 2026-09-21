@@ -1,0 +1,67 @@
+# Continuous integration: the gate every change passes before it can merge.
+#
+# This workflow deliberately does NOT authenticate to Snowflake and holds no
+# secrets. Pull requests can come from anywhere, and a PR-triggered job that
+# can reach your account is a job an outsider can make reach your account.
+# CI proves the code is correct. Deployment is currently manual, via
+# `snow app deploy` from a workstation; when it moves into Actions it belongs
+# in a separate workflow with its own OIDC identity, not bolted on here.
+#
+# Everything here is reproducible on your laptop with: npm run verify
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Least privilege. Declaring any permissions block drops every unlisted
+# scope to `none`, so this job can read the repo and do nothing else —
+# it cannot push, comment, or mint tokens even if a dependency tries.
+permissions:
+  contents: read
+
+# Cancel superseded runs. Without this, pushing three commits in a minute
+# queues three full builds and you wait on results for code you already
+# replaced. `main` is excluded from cancellation via the group key so the
+# post-merge run always completes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          # Single source of truth for the Node version: .nvmrc. CI and your
+          # shell read the same file, so "works on my machine" stops being a
+          # difference of opinion.
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        # `npm ci` installs exactly what package-lock.json pins and fails if
+        # the lockfile and package.json disagree. `npm install` would silently
+        # resolve newer versions, so CI would be testing dependencies that
+        # nobody has on their machine.
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        # Production build. Catches failures that only appear when Next.js
+        # compiles routes for real, which `next dev` does not.
+        run: npm run build

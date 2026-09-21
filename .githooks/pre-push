@@ -1,0 +1,30 @@
+#!/bin/sh
+# pre-push: run the same gate CI runs, before anything leaves your machine.
+#
+# This is a convenience, not a boundary. The boundary is the GitHub ruleset on
+# `main`, which requires the `verify` check to pass and changes to arrive via
+# pull request. That runs on GitHub and cannot be skipped.
+#
+# This hook exists because catching a failure in seconds locally beats catching
+# it in two minutes after a round trip through CI. Its limits:
+#   - runs on your machine, so it is only as trustworthy as your machine
+#   - `git push --no-verify` skips it entirely
+#   - it does not apply to anyone else, or to the GitHub web UI
+#
+# Enable with: npm run setup-hooks   (sets core.hooksPath to .githooks)
+
+set -e
+
+echo "pre-push: running npm run verify (the same gate CI runs)..."
+
+if ! npm run verify; then
+  echo ""
+  echo "pre-push: verify FAILED — push aborted."
+  echo ""
+  echo "  Fix it, or bypass deliberately with:  git push --no-verify"
+  echo "  (the ruleset on main will still block a red build)"
+  echo ""
+  exit 1
+fi
+
+echo "pre-push: verify passed."

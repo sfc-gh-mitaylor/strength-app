@@ -1,0 +1,32 @@
+# Dependabot keeps dependencies moving in small, reviewable steps.
+#
+# The failure mode it prevents is the 18-month-stale repo: you avoid
+# upgrading because each upgrade is scary, which makes the next one scarier.
+# Weekly PRs that CI has already verified turn that into routine.
+#
+# Grouping matters. Ungrouped, this repo would open ~20 PRs in week one and
+# you would stop reading them, which is worse than no Dependabot at all.
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # Patch and minor bumps are routine and land together.
+      routine:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    # Major bumps arrive as their own PRs — React, Next and the Snowflake SDK
+    # break things across majors, and each deserves to be read on its own.
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ["*"]
