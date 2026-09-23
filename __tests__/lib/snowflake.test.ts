@@ -122,7 +122,6 @@ describe("readTomlDefaultConnection", () => {
         [prod]
         account = "myaccount"
         user = "myuser"
-        password = "mypass"
         warehouse = "mywh"
       `,
     })
@@ -134,6 +133,42 @@ describe("readTomlDefaultConnection", () => {
     expect(conn!.warehouse).toBe("mywh")
   })
 
+  it("parses password from toml, and lets SNOWFLAKE_PASSWORD overlay it", () => {
+    // `password` is a supported field on TomlConnection and a member of
+    // CONN_KEYS in lib/snowflake.ts, so it needs coverage like any other key.
+    //
+    // The value is an angle-bracket placeholder on purpose. Secret scanners
+    // (GitGuardian's Generic Password detector) fire on credential-shaped
+    // literals even when they are obviously fake, and every hit is a real
+    // incident for somebody to triage. Placeholders in this form are
+    // recognised as non-secrets. Do not replace it with something that reads
+    // like a password, and do not delete the test to silence a scanner —
+    // deleting it is what removed this coverage in the first place.
+    setupFiles({
+      [path.join(HOME, ".snowflake", "connections.toml")]: `
+        default_connection_name = "prod"
+        [prod]
+        account = "myaccount"
+        user = "myuser"
+        password = "<placeholder>"
+      `,
+    })
+
+    const conn = readTomlDefaultConnection()
+    expect(conn).not.toBeNull()
+    expect(conn!.password).toBe("<placeholder>")
+
+    // CONN_KEYS includes "password", so the env var must win over the file.
+    // The parsed config is memoised, so reset the cache first — without this
+    // the second call returns the first result and the assertion below would
+    // pass or fail for the wrong reason.
+    process.env.SNOWFLAKE_PASSWORD = "<from-env>"
+    resetTomlConfigCache()
+    const overlaid = readTomlDefaultConnection()
+    expect(overlaid!.password).toBe("<from-env>")
+    expect(overlaid!.account).toBe("myaccount")
+  })
+
   it("reads connections from config.toml legacy layout when connections.toml is absent", () => {
     setupFiles({
       [path.join(HOME, ".snowflake", "config.toml")]: `
@@ -141,7 +176,6 @@ describe("readTomlDefaultConnection", () => {
         [connections.legacy]
         account = "legacy-acct"
         user = "legacy-user"
-        password = "legacy-pass"
       `,
     })
 
@@ -157,13 +191,11 @@ describe("readTomlDefaultConnection", () => {
         [modern]
         account = "modern-acct"
         user = "modern-user"
-        password = "modern-pass"
       `,
       [path.join(HOME, ".snowflake", "config.toml")]: `
         [connections.legacy]
         account = "legacy-acct"
         user = "legacy-user"
-        password = "legacy-pass"
       `,
     })
 
@@ -178,11 +210,9 @@ describe("readTomlDefaultConnection", () => {
         [alpha]
         account = "alpha-acct"
         user = "alpha-user"
-        password = "alpha-pass"
         [beta]
         account = "beta-acct"
         user = "beta-user"
-        password = "beta-pass"
       `,
       [path.join(HOME, ".snowflake", "config.toml")]: `
         default_connection_name = "beta"
@@ -203,11 +233,9 @@ describe("readTomlDefaultConnection", () => {
         [first]
         account = "first-acct"
         user = "first-user"
-        password = "first-pass"
         [second]
         account = "second-acct"
         user = "second-user"
-        password = "second-pass"
       `,
     })
 
@@ -223,7 +251,6 @@ describe("readTomlDefaultConnection", () => {
         [myconn]
         account = "fallback-acct"
         user = "fallback-user"
-        password = "fallback-pass"
       `,
     })
 
@@ -248,7 +275,6 @@ describe("readTomlDefaultConnection", () => {
         [connections.prod]
         account = "nested-acct"
         user = "nested-user"
-        password = "nested-pass"
       `,
     })
 
@@ -264,11 +290,9 @@ describe("readTomlDefaultConnection", () => {
         [test]
         account = "legacy-acct"
         user = "legacy-user"
-        password = "legacy-pass"
         [connections.test]
         account = "nested-acct"
         user = "nested-user"
-        password = "nested-pass"
       `,
     })
 
@@ -284,11 +308,9 @@ describe("readTomlDefaultConnection", () => {
         [legacy_conn]
         account = "legacy-acct"
         user = "legacy-user"
-        password = "legacy-pass"
         [connections.new_conn]
         account = "new-acct"
         user = "new-user"
-        password = "new-pass"
       `,
     })
 
@@ -305,7 +327,6 @@ describe("readTomlDefaultConnection", () => {
         [myconn]
         account = "custom-home-acct"
         user = "custom-home-user"
-        password = "custom-home-pass"
       `,
     })
 
@@ -320,7 +341,6 @@ describe("readTomlDefaultConnection", () => {
         [cached]
         account = "cached-acct"
         user = "cached-user"
-        password = "cached-pass"
       `,
     })
 
@@ -339,7 +359,6 @@ describe("readTomlDefaultConnection", () => {
         [v1]
         account = "v1-acct"
         user = "v1-user"
-        password = "v1-pass"
       `,
     })
 
@@ -353,7 +372,6 @@ describe("readTomlDefaultConnection", () => {
         [v2]
         account = "v2-acct"
         user = "v2-user"
-        password = "v2-pass"
       `,
     })
 
@@ -371,7 +389,6 @@ describe("readTomlDefaultConnection", () => {
         [myconn]
         account = "file-acct"
         user = "file-user"
-        password = "file-pass"
       `,
     })
 
