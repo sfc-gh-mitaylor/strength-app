@@ -1,0 +1,128 @@
+# Ship configuration: how a change gets from a working tree onto main.
+#
+# Read by the `ship` skill. The risk lanes below decide how hard the human read
+# is, so a wrong glob here silently changes the review bar. Treat this file as
+# red-lane itself.
+#
+# Kept deliberately in step with rule190's .ship.yml. Rulesets cannot be shared
+# across repos on a personal GitHub account — every repo carries its own copy —
+# so the only thing preventing drift is keeping these files aligned on purpose.
+
+critic:
+  # MUST be a different vendor from the authoring model (Claude). The point is
+  # that the model reviewing the diff has different training data and different
+  # failure modes from the model that wrote it — a same-model pass rationalises
+  # its own choices.
+  #
+  # Bare `gpt-5.4` is NOT a valid identifier and fails with an authorization
+  # error. The `openai-` prefix is required.
+  model: openai-gpt-5.4
+
+verify:
+  # Identical to what CI runs. `npm run verify` chains check-node, typecheck,
+  # test, and build — the same steps as the `verify` job in
+  # .github/workflows/ci.yml. One command, one source of truth: if this drifts
+  # from CI, local green stops predicting remote green.
+  #
+  # Note the Node trap: this repo pins 22 in .nvmrc and check-node.mjs enforces
+  # it. A shell running a newer Node fails at the first step. Fix with
+  #   export PATH="/opt/homebrew/opt/node@22/bin:$PATH"
+  - npm run verify
+
+lanes:
+  # PRECEDENCE: the MOST SPECIFIC matching glob wins. On an exact tie, the
+  # highest lane wins (red > yellow > green).
+  #
+  # Specificity, not lane order, resolves overlaps — and it gives the intended
+  # answer in both directions:
+  #   lib/repo.ts        beats  lib/**          -> red    (stricter)
+  #   components/ui/**   beats  components/**   -> green  (looser)
+  # A pure red-beats-yellow rule would make green unreachable, because
+  # components/** also matches everything under components/ui/.
+  default: red
+
+  # Red: every hunk, read in the CoCo diff view (Ctrl+Shift+G), before the
+  # commit. These paths can break the security or data-integrity properties the
+  # app claims, and no test suite reliably catches that.
+  red:
+    - app.yml                     # SPCS deploy config and identity
+    - sql/**                      # schema, seeds, and the slot migrations
+    - lib/snowflake.ts            # connection handling; querySnowflake takes
+                                  # raw SQL with no binding
+    - lib/repo.ts                 # binds-only rule, and ownership re-checked in
+                                  # the WHERE clause rather than trusted
+    - lib/caller.ts               # single source of truth for "who is this?".
+                                  # SPCS authenticates ANY user in the account,
+                                  # so a client-supplied user name would let one
+                                  # user read and write another's log
+    - lib/validate.ts             # Snowflake does not enforce the PK/CHECK
+                                  # constraints in sql/01_schema.sql, so this is
+                                  # the only thing between a bad payload and
+                                  # bad data
+    - lib/training-db.ts          # domain-level Snowflake access
+    - lib/stimulus.ts             # the training rules engine: effectiveWeight,
+                                  # TM computation and eligibility, weekly
+                                  # rollups, plateau and near-limit
+                                  # classification. Not a trust boundary, but
+                                  # app/api/sets and app/api/week/close feed its
+                                  # output straight into setTrainingMax,
+                                  # insertSet, upsertWeeklyStimulus and
+                                  # recordRotation — so a defect here writes
+                                  # wrong history, not just a wrong screen
+    - app/api/**                  # every trust boundary in the app
+    - .github/**                  # CI, deploy, and dependabot: the gates and
+                                  # how dependencies enter the repo
+    - .githooks/**
+    - .ship.yml                   # this file decides the lanes
+    - .gitignore                  # weakening this is how secrets get committed
+    - .env*                       # should never be committed at all
+    - package-lock.json           # dependency provenance
+    - package.json                # defines `verify` — the gate itself
+    - next.config.mjs             # build output and server packaging for SPCS
+    - .nvmrc                      # runtime pin; CI reads the same file
+    - .npmrc                      # registry and engine-strict behaviour
+    - tsconfig.json               # strictness is a correctness gate
+    - vitest.config.ts            # test discovery: silently narrowing this
+                                  # disables tests without deleting them
+    - scripts/**                  # check-node.mjs runs as a preinstall hook
+
+  # NOT listed, and therefore red by default: __tests__/**, postcss.config.mjs,
+  # components.json, next-env.d.ts. The first is deliberate — tests are the
+  # gate, the critic assumes the same agent wrote the code and the tests
+  # together to pass, so a weakened test is a weakened gate and earns a strict
+  # read. The rest are the fail-safe default doing its job: nobody classified
+  # them, so they get the strict lane until somebody decides otherwise. That is
+  # the correct direction for the error to run.
+
+  # Yellow: read the whole diff properly in the editor, but hunk-by-hunk
+  # scrutiny is not required. Domain logic lives here.
+  #
+  # lib/safety.ts is a deliberate judgement call, not an oversight. An
+  # adversarial review argued for promoting it, because app/api/plan and
+  # app/api/sessions consume getNearLimitUsage() and it shares StimulusConfig
+  # fields with lib/stimulus.ts. It stays yellow because its own header says it
+  # is an ADVISORY weekly budget rather than a block, and it persists nothing:
+  # getting it wrong produces a bad recommendation, not bad stored data. That is
+  # the line between this and lib/stimulus.ts, which is red precisely because its
+  # output IS persisted. Keeping red honest is what stops it being rubber-
+  # stamped. Revisit if safety.ts ever gains a write path.
+  yellow:
+    - "*.md"                      # root-level docs: README.md and friends.
+                                  # `**/*.md` alone does NOT match these in
+                                  # most glob implementations.
+    - "**/*.md"
+    - docs/**                     # no docs/ tree here yet; kept for parity with
+                                  # rule190 so the two configs stay comparable
+    - components/**               # components/ui/** is more specific -> green
+    - lib/**                      # the seven files above are more specific -> red
+    - app/**                      # app/api/** is more specific -> red
+
+  # Green: a glance. Vendored primitives and static assets only — things where
+  # being wrong is visible immediately and costs nothing.
+  green:
+    - components/ui/**            # shadcn primitives
+    - public/**
+    - icon.svg
+
+  # When a change touches several files in different lanes, the highest lane
+  # reached by any file applies to the whole review.
